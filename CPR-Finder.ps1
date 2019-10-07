@@ -1918,7 +1918,8 @@ $LastLines = Get-Content $OutFileFLPSearch -tail 52
     $SearchTargetLength = $ArrShareList.Count
 
     if ($ArrShareList.Contains($LastShareOrDrive))
-    {        [int]$ShareIndex = $ArrShareList.IndexOf($LastShareOrDrive) + 1 
+    {
+        [int]$ShareIndex = $ArrShareList.IndexOf($LastShareOrDrive) + 1 
         
         if ($SearchTargetLength -gt 1) 
         {
@@ -2579,7 +2580,7 @@ Function CPR-Finder
     
     if (!$(Test-Path $OutfilePath)) 
     {
-        New-Item -Path $OutfilePath
+        New-Item -ItemType directory -Path "$OutfilePath" | Out-Null
     } 
     
     if (Check-IsProcessRunning)
