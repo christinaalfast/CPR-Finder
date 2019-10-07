@@ -25,6 +25,10 @@ To install the prerequisites for **CPR-finder**, follow the instructions below
 You are now ready to run CPR-Finder.ps1. We recommend running the script with a newly created user account with no specific or privileged access rights if you want to locate files with “unprotected” cpr-numbers.
 If your objective is to identify every file with cpr-numbers in them, you can scan using a privileged account which has read access to all your data.
 
+To scan all fixed drives on localhost run:
+
+		CPR-Finder.ps1
+
 To scan all servers in your domain run:
 
 		CPR-Finder.ps1 -ScanMode ServersOnly
