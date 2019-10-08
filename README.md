@@ -1,5 +1,9 @@
 <!--
-test
+Title: CPR-Finder
+Description: Identifies shares and checks file content for cpr-numbers (Danish Social Security Numbers).
+The search is performed based on regular expressions and can assist you in your GDPR efforts.
+Modulus 11 check is performed to minimize the amount of false positives.
+Authors: Christina Alfast Espensen & Benjamin Henriksen
 -->
 
 
@@ -39,7 +43,7 @@ Refer to the examples for further details.
 
 ## Usage
 Identifies shares and checks file content for cpr-numbers (Danish Social Security Numbers).
-The search is performed based on regular expressions.
+The search is performed based on regular expressions and can assist you in your GDPR efforts.
    Modulus 11 check is performed to minimize the amount of false positives.
 Dates where modulus 11 is not upheld are excluded.
 This tool will allow you to scan your environment. The tool is not meant as a substitute
