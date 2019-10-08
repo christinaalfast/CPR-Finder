@@ -153,7 +153,7 @@ For performance reasons the scan moves on to another file after 50 CPR-Number hi
  When handling compressed archives (.zip, .pst and .ost files) every file with cpr-numbers
  within the archive is flagged. This means a .pst file with 100 e-mails containing
  cpr-numbers will be flagged 100 times. This will allow you to locate the excat e-mails
- getting flagged. The output for compressed archives not mentioned above, is stil being improved.
+ getting flagged. The output for compressed archives not mentioned above, is still being improved.
  
 ## Version & License
 Version 1.42
