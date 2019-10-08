@@ -1,4 +1,6 @@
-
+<!--
+test
+-->
 
 
 			 CCCCC  PPPPPP  RRRRRR         FFFFFFF IIIII NN   NN DDDDD   EEEEEEE RRRRRR
@@ -147,10 +149,10 @@ If you are only interested in CPR-numbers that are readable to "everyone", creat
 We recommend using a none privileged account during the first scans, to ensure that unprotected files are addressed initially.
 For performance reasons the scan moves on to another file after 50 CPR-Number hits. Modulus confirmation stops after one CPR-number verification.
 ## Known "issues"
- When handling compressed archives e.g. .zip, .pst and .ost files, every file with cpr-numbers
+ When handling compressed archives (.zip, .pst and .ost files) every file with cpr-numbers
  within the archive is flagged. This means a .pst file with 100 e-mails containing
  cpr-numbers will be flagged 100 times. This will allow you to locate the excat e-mails
- getting flagged.
+ getting flagged. The output for compressed archives not mentioned above, is stil being improved.
  
 ## Version & License
 Version 1.42
