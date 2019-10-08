@@ -20,6 +20,9 @@ Authors: Christina Alfast Espensen & Benjamin Henriksen
 ## CPR-Finder
 			Authors: Christina Alfast Espensen & Benjamin Henriksen
 
+## Description
+Identifies shares and checks file content for cpr-numbers (Danish Social Security Numbers). The search is performed based on regular expressions and can assist you in your GDPR efforts. Modulus 11 check is performed to minimize the amount of false positives. Dates where modulus 11 is not upheld are excluded. This tool will allow you to scan your environment. The tool is not meant as a substitute for a commercial enterprise solution if that is what you require.
+
 ## Installation:					
 To install the prerequisites for **CPR-finder**, follow the instructions below
 1. Make sure you have the **Powershell Active Directory module** installed
@@ -42,13 +45,7 @@ Refer to the examples for further details.
 
 
 ## Usage
-Identifies shares and checks file content for cpr-numbers (Danish Social Security Numbers).
-The search is performed based on regular expressions and can assist you in your GDPR efforts.
-   Modulus 11 check is performed to minimize the amount of false positives.
-Dates where modulus 11 is not upheld are excluded.
-This tool will allow you to scan your environment. The tool is not meant as a substitute
-for a commercial enterprise solution if that is what you require.
-### Modes
+
 CPR-Finder can run in three  modes:
 
 **1. Host-Only Mode** (Default)
