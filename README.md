@@ -156,12 +156,9 @@ For performance reasons the scan moves on to another file after 50 CPR-Number hi
  getting flagged. The output for compressed archives not mentioned above, is still being improved.
  
 ## Version & License
- Version 1.42
- Release date: 30-09-2019
- License: BSD 3-Clause
+ Version 1.42 (Release date: 30-09-2019) <br/>
+ License: BSD 3-Clause <br/>
  A very slightly modified version of harmj0y’s invoke-sharefinder is embedded.
-
-
 
 ## Modulus 11
 The following dates are dates CPR numbers without modulus 11 control has been issued:
