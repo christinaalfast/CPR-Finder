@@ -156,10 +156,10 @@ For performance reasons the scan moves on to another file after 50 CPR-Number hi
  getting flagged. The output for compressed archives not mentioned above, is still being improved.
  
 ## Version & License
-Version 1.42
-Release date: 30-09-2019
-License: BSD 3-Clause
-A very slightly modified version of harmj0y’s invoke-sharefinder is embedded.
+ Version 1.42
+ Release date: 30-09-2019
+ License: BSD 3-Clause
+ A very slightly modified version of harmj0y’s invoke-sharefinder is embedded.
 
 
 
