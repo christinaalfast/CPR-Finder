@@ -7,7 +7,7 @@
 	Dates where modulus 11 is not upheld are excluded.
 
     Author: Christina Alfast Espensen and Benjamin Henriksen
-    Version: 1.42
+    Version: 1.43
     License: BSD 3-Clause
 
     Required Dependencies:  - FileLocator Pro (Mythicsoft) including our two search criteria files (SearchCriteriaDocuments.srf and SavedCriteriaAllFiles.srf) 
@@ -1888,16 +1888,14 @@ Function Check-IsProcessRunning {
      }
 }
 
-Function ShowScanProgress {
 
-   # $LastShareOrDiskSearched50L
-#    $LastLines = Get-Content $OutFileFLPSearch -tail 52
-
-$LastLines = Get-Content $OutFileFLPSearch -tail 52
+Function ShowScanProgress 
+{
+    $LastLines = Get-Content $OutFileFLPSearch -tail 52
+    $LastShareOrDrive = ""
 
     foreach($line in $LastLines)
     { 
-        # .pst files are handles slightly different and other files
         if ($line.StartsWith("\\")) 
         {
             $ArrLine           = $Line.Split("`t")
@@ -1917,7 +1915,7 @@ $LastLines = Get-Content $OutFileFLPSearch -tail 52
     $ArrShareList = $SearchTarget.Split(';')
     $SearchTargetLength = $ArrShareList.Count
 
-    if ($ArrShareList.Contains($LastShareOrDrive))
+    if ($ArrShareList.Contains($LastShareOrDrive) -or $LastShareOrDrive -ne "")
     {
         [int]$ShareIndex = $ArrShareList.IndexOf($LastShareOrDrive) + 1 
         
@@ -1934,6 +1932,7 @@ $LastLines = Get-Content $OutFileFLPSearch -tail 52
         }
     }
 }
+
 
 Function Run-Scanner{
     <#
