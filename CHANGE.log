@@ -1,0 +1,6 @@
+Version 1.43 (Oct 16, 2019)
+Bug fixes to progress bar. The bug had no impact on the scan result and output files.
+
+
+Version 1.42 (Oct 7, 2019)
+Initial release
