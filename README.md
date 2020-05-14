@@ -114,7 +114,7 @@ CPR-Finder can run in three  modes:
     This will output the computer that is currently scanned.
 
 **ExcludedTargets**
-    Semi colon separated list of targets that should be excluded from the scan. This can be an entire server: '\\servername\' or a specific share '\\servername\share'.
+    Semi colon separated list of targets that should be excluded from the scan. This can be an entire server: '\\\\servername\' or a specific share '\\\\servername\share'.
     Everything that begins with the string will be excluded.
 
 **OutputFilePrefix**
