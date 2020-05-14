@@ -1,17 +1,11 @@
-<!--
-Title: CPR-Finder
-Description: Identifies shares and checks file content for cpr-numbers (Danish Social Security Numbers).
-The search is performed based on regular expressions and can assist you in your GDPR efforts.
-Modulus 11 check is performed to minimize the amount of false positives.
-Authors: Christina Alfast Espensen & Benjamin Henriksen
--->
 
 
-			 CCCCC  PPPPPP  RRRRRR      FFFFFFF IIIII NN   NN DDDDD   EEEEEEE RRRRRR
-			CC    C PP   PP RR   RR     FF       III  NNN  NN DD  DD  EE      RR   RR
-			CC      PPPPPP  RRRRRR  __  FFFF     III  NN N NN DD   DD EEEEE   RRRRRR
-			CC    C PP      RR  RR      FF       III  NN  NNN DD   DD EE      RR  RR
-			 CCCCC  PP      RR   RR     FF      IIIII NN   NN DDDDDD  EEEEEEE RR   RR
+
+			 CCCCC  PPPPPP  RRRRRR         FFFFFFF IIIII NN   NN DDDDD   EEEEEEE RRRRRR
+			CC    C PP   PP RR   RR        FF       III  NNN  NN DD  DD  EE      RR   RR
+			CC      PPPPPP  RRRRRR  _____  FFFF     III  NN N NN DD   DD EEEEE   RRRRRR
+			CC    C PP      RR  RR         FF       III  NN  NNN DD   DD EE      RR  RR
+			 CCCCC  PP      RR   RR        FF      IIIII NN   NN DDDDDD  EEEEEEE RR   RR
 
 
 
@@ -19,9 +13,6 @@ Authors: Christina Alfast Espensen & Benjamin Henriksen
 
 ## CPR-Finder
 			Authors: Christina Alfast Espensen & Benjamin Henriksen
-
-## Description
-Identifies shares and checks file content for cpr-numbers (Danish Social Security Numbers). The search is performed based on regular expressions and can assist you in your GDPR efforts. Modulus 11 check is performed to minimize the amount of false positives. Dates where modulus 11 is not upheld are excluded. This tool will allow you to scan your environment. The tool is not meant as a substitute for a commercial enterprise solution if that is what you require.
 
 ## Installation:					
 To install the prerequisites for **CPR-finder**, follow the instructions below
@@ -34,18 +25,25 @@ To install the prerequisites for **CPR-finder**, follow the instructions below
 You are now ready to run CPR-Finder.ps1. We recommend running the script with a newly created user account with no specific or privileged access rights if you want to locate files with “unprotected” cpr-numbers.
 If your objective is to identify every file with cpr-numbers in them, you can scan using a privileged account which has read access to all your data.
 
-To scan all fixed drives on localhost run:
-
+Scans all document files on all fixed drives on localhost open powershell and run:
+		
 		CPR-Finder.ps1
 
-To scan all servers in your domain run:
+Or to scan all servers in your domain run:
 
 		CPR-Finder.ps1 -ScanMode ServersOnly
 Refer to the examples for further details.	
 
 
-## Usage
 
+## Usage
+Identifies shares and checks file content for cpr-numbers (Danish Social Security Numbers).
+The search is performed based on regular expressions.
+   Modulus 11 check is performed to minimize the amount of false positives.
+Dates where modulus 11 is not upheld are excluded.
+This tool will allow you to scan your environment. The tool is not meant as a substitute
+for a commercial enterprise solution if that is what you require.
+### Modes
 CPR-Finder can run in three  modes:
 
 **1. Host-Only Mode** (Default)
@@ -110,7 +108,17 @@ CPR-Finder can run in three  modes:
     Scaning all file types will increas the scanning time, and increase the number of false positives.
 
 **IncludeCPRInOutput**
-    This will include the first found (and modulus matched) CPR number in the parsed output files.
+    Include the first found (and modulus matched) CPR number in the parsed output files.
+
+**DebugVerbose**
+    This will output the computer that is currently scanned.
+
+**ExcludedTargets**
+    Semi colon separated list of targets that should be excluded from the scan. This can be an entire server: '\\servername\' or a specific share '\\servername\share'.
+    Everything that begins with the string will be excluded.
+
+**OutputFilePrefix**
+    This will add a 'Prefix' to the all output file names.
 
 ## Examples
 Find files with CPR numbers in c:\temp and "c:\temp folder":
@@ -150,15 +158,18 @@ If you are only interested in CPR-numbers that are readable to "everyone", creat
 We recommend using a none privileged account during the first scans, to ensure that unprotected files are addressed initially.
 For performance reasons the scan moves on to another file after 50 CPR-Number hits. Modulus confirmation stops after one CPR-number verification.
 ## Known "issues"
- When handling compressed archives (.zip, .pst and .ost files) every file with cpr-numbers
+ When handling compressed archives e.g. .zip, .pst and .ost files, every file with cpr-numbers
  within the archive is flagged. This means a .pst file with 100 e-mails containing
  cpr-numbers will be flagged 100 times. This will allow you to locate the excat e-mails
- getting flagged. The output for compressed archives not mentioned above, is still being improved.
+ getting flagged.
  
 ## Version & License
- Version 1.43 (Release date: Oct 16, 2019) <br/>
- License: BSD 3-Clause <br/>
- A very slightly modified version of harmj0y’s invoke-sharefinder is embedded.
+Version 1.45
+Release date: 14-05-2020
+License: BSD 3-Clause
+A very slightly modified version of harmj0y’s invoke-sharefinder is embedded.
+
+
 
 ## Modulus 11
 The following dates are dates CPR numbers without modulus 11 control has been issued:

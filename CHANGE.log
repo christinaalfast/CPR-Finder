@@ -1,3 +1,17 @@
+Version 1.45 (May 16, 2020)
+- Included the possibility to exclude targets.
+- Included the possibility to add a 'Prefix' the output file names.
+- Log file is now created and included in the ScanOutput folder.
+- Progress bars have improved.
+- It is now possible to change the amount of CPR matches File LocatorPro identifies 
+  until it moves on to the next file. Default is 15.
+  Lowering the parameter can improve performance,
+  however be aware that it can also result in false negatives.
+- Fields removed from output files due to change in how we scan: 
+  FileSize, DocumentType, CreationDate, LastAccessDate
+
+
+
 Version 1.43 (Oct 16, 2019)
 Bug fixes to progress bar. The bug had no impact on the scan result and output files.
 

@@ -2,27 +2,27 @@
     .SYNOPSIS
 
     Identifies shares and checks file content for CPR-numbers (Danish Social Security Numbers (SSN)). 
-	The check is performed based on regular expressions. 
+    The check is performed based on regular expressions. 
     Modulus 11 check is performed to minimize the number of false positives.
-	Dates where modulus 11 is not upheld are excluded.
+    Dates where modulus 11 is not upheld are excluded.
 
     Author: Christina Alfast Espensen and Benjamin Henriksen
-    Version: 1.43
+    Version: 1.45 
     License: BSD 3-Clause
 
-    Required Dependencies:  - FileLocator Pro (Mythicsoft) including our two search criteria files (SearchCriteriaDocuments.srf and SavedCriteriaAllFiles.srf) 
+    Required Dependencies:  - FileLocator Pro (Mythicsoft) including our search criteria files (SavedCriteriaAllFiles.srf and SearchCriteriaDocumentsAndCompressed.srf) 
                             - Powershell Active Directory module
 
     .DESCRIPTION
- 	The credentials used to run the script, will determine which files are accessible (scanned) - so choose these credentials wisely.		
-	If you are only interested in CPR-numbers that are readable to "everyone", create a "random" user account, and run the script with that user. 
-	We recommend using a none priviledge account during the first scans, to ensure that unprotected files are addressed initially.
+    The credentials used to run the script, will determine which files are accessible (scanned) - so choose these credentials wisely.		
+    If you are only interested in CPR-numbers that are readable to "everyone", create a "random" user account, and run the script with that user. 
+    We recommend using a none priviledge account during the first scans, to ensure that unprotected files are addressed initially.
 
     For performance reasons the scan moves on to another file after 50 CPR-Number hits. Modulus confirmation stops after one CPR-number hit.
 
     CPR-Finder can run in two modes:
     
-    1. Host-Only Mode (Default)
+    1. Host-Only Mode (Default) 
 
         CPR-Finder Host-Only Mode consists of the following three phases:
 
@@ -59,20 +59,20 @@
 					
     .PARAMETER ComputerPasswordAgeDays
     Only applicable to Domain Mode.
-	Specifies the amout of days since the computer has changed password.
+    Specifies the amout of days since the computer has changed password.
     This is an indicator of whether or not a computer object in Active Directory is dead or alive.
     The lower the value, the less computers will be scanned. 
     The default and recommened value is 31.
 
     .PARAMETER StartGui
-	You can choose to start the GUI of FileLocator Pro. When you do this, the output will not be parsed and no new html or csv file is generated.
+    You can choose to start the GUI of FileLocator Pro. When you do this, the output will not be parsed and no new html or csv file is generated.
     This should be used for debug purposes only.
+    Currently the StartGui switch can not be combined with the 'DomainMode' scan mode
 
     .PARAMETER ScanMode
-    All: When this value is selected the scan will be performed on all hosts in the domain (default search base). 
-    HostOnly: (Default) Will only scan drives or supplied paths. (Accepts UNC).
-    ServerOnly: When this parameter is supplied the scan will only be performed on Windows servers and none Windows devices i.e. NAS devices (only those with shares will be scanned).
-      	
+    HostOnly: (Default) Will only scan drives or supplied paths. (Accepts UNC). 
+    DomainModeAll: When this value is selected the scan will be performed on all hosts in the domain (default search base). 
+    DomainModeServersOnly: When this parameter is supplied the scan will only be performed on Windows servers and none Windows devices i.e. NAS devices (only those with shares will be scanned).      	
 
     .PARAMETER ScanTarget 
     Not applicable for Domain Mode.
@@ -83,13 +83,19 @@
     Default is Document type files. 
     Scaning all file types will increas the scanning time, and increase the number of false positives.
     
-
     .PARAMETER IncludeCPRInOutput 
-    This will include the first found (and modulus matched) CPR number in the parsed output files.
+    This will include a column showing the first found (and modulus matched) CPR number in the parsed output files.
+    If there was no modulus matched CPR number, the field is blank.
 
     .PARAMETER DebugVerbose 
     This will output the computer that is currently scanned.
 
+    .PARAMETER ExcludedTargets
+    Semi colon separated list of targets that should be excluded from the scan. This can be an entire server: '\\servername\' or a specific share '\\servername\share'.
+    Everything that begins with the string will be excluded.
+
+    .PARAMETER OutputFilePrefix
+    This will add a 'Prefix' to the all output file names.
 
     .EXAMPLE
     > CPR-Finder.ps1 -ScanTarget "C:\Temp;C:\Temp Folder"
@@ -123,69 +129,90 @@
 
     .NOTES
     We have absolutely no affiliation with Mythicsoft or any of thier employees.
-	If you are aware of free multi-threaded tools, that could replace FileLocator Pro please let us know.
+    If you are aware of free multi-threaded tools, that could replace FileLocator Pro please let us know.
 
-	The following dates are dates CPR numbers without modulus control has been issued:
+    The following dates are dates CPR numbers without modulus control has been issued:
 
-		1. januar 1960	1. januar 1964	1. januar 1965	1. januar 1966
-		1. januar 1969	1. januar 1970	1. januar 1980	1. januar 1982
-		1. januar 1984	1. januar 1985	1. januar 1986	1. januar 1987
-		1. januar 1988	1. januar 1989	1. januar 1990	1. januar 1992
+    1. januar 1960	1. januar 1964	1. januar 1965	1. januar 1966
+    1. januar 1969	1. januar 1970	1. januar 1980	1. januar 1982
+    1. januar 1984	1. januar 1985	1. januar 1986	1. januar 1987
+    1. januar 1988	1. januar 1989	1. januar 1990	1. januar 1992
 
     .LINK
     https://cpr.dk/cpr-systemet/personnumre-uden-kontrolciffer-modulus-11-kontrol/
 
     #>	
-
-
 param 
 (
-    [Parameter(Mandatory=$false)]
         [int]$ComputerPasswordAgeDays = 31,
-    [Parameter(Mandatory=$false)]
         [switch]$StartGui,
-    [Parameter(Mandatory=$false)]
         [switch]$ScanAllFiles,
-    [parameter(Mandatory=$false)]
-        [validateset( "HostOnly", "DomainModeAll", "DomainModeServersOnly")] [String] $ScanMode="HostOnly",
-    [Parameter(Mandatory=$false)] 
+        [validateset( 'HostOnly', 'DomainModeAll', 'DomainModeServersOnly')] [String] $ScanMode,
         [string]$ScanTarget,
-    [Parameter(Mandatory=$false)] 
         [switch]$IncludeCPRInOutput,
-    [Parameter(Mandatory=$false)] 
-        [switch]$DebugVerbose
+        [switch]$DebugVerbose,
+        [string]$ExcludedTargets,
+        [string]$OutputFilePrefix = ''
 )
 
-
-Clear-Host
+$StartTime = $(get-date)
+[decimal]$script:SearchedGB = 0
+[long]$script:SearchedItems = 0
+[decimal]$script:CheckedGB  = 0
+[long]$script:CheckedItems  = 0
 
 # ----- SCRIPT CONFIGURATION ----- #
 # THIS PART CAN BE ALTERED TO MATCH YOUR INSTALLATION
 
 $CPRFinderPath = $PSScriptRoot
-$FileLocatorProInstallationPath = "C:\Program Files\Mythicsoft\FileLocator Pro"  # change path if necessary
+
+$FileLocatorProInstallationPath = 'C:\Program Files\Mythicsoft\FileLocator Pro'  # change path if necessary
 
 if ($StartGui.IsPresent) { $flpsearchPath = "$FileLocatorProInstallationPath\filelocatorpro.exe" }
 else { $flpsearchPath = "$FileLocatorProInstallationPath\flpsearch.exe" }
 
-if ($ScanAllFiles.IsPresent) { $flpsearchCriteriaPath = "$CPRFinderPath\FileLocatorPro_Searches\SavedCriteriaAllFiles.srf" }
-else { $flpsearchCriteriaPath = "$CPRFinderPath\FileLocatorPro_Searches\SearchCriteriaDocuments.srf" }
+$flpConvertPath = "$FileLocatorProInstallationPath\FLProconvert.exe"
 
-$TimeStamp = Get-Date -Format "yyyyMMdd-HHmmss"
+if ($ScanAllFiles.IsPresent) { $flpsearchCriteriaPath = "$CPRFinderPath\FileLocatorPro_Searches\SavedCriteriaAllFiles.srf" }
+else { $flpsearchCriteriaPath = "$CPRFinderPath\FileLocatorPro_Searches\SearchCriteriaDocumentsAndCompressed.srf" }
+
+$TimeStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 
 $OutfilePath = "$CPRFinderPath\ScanOutput"
-$OutFileFLPSearch = "$OutfilePath\$($TimeStamp)_cpr_finder_filelocatorpro_result.csv"
+if (!$(Test-Path -Path $OutfilePath)) { New-Item -ItemType directory -Path "$OutfilePath" | Out-Null }
 
-$OutFileHtml = "$OutfilePath\$($TimeStamp)_cpr_finder_result_parsed.html"
-$OutFilecsv  = "$OutfilePath\$($TimeStamp)_cpr_finder_result_parsed.csv"
-$ScreenOutput=""
+$OutFileFLPSearch = "$OutfilePath\$($TimeStamp)_$($OutputFilePrefix)cpr_finder_filelocatorpro_result.csv"
+$OutFileHtml  = "$OutfilePath\$($TimeStamp)_$($OutputFilePrefix)cpr_finder_result_parsed.html"
+$OutFilecsv   = "$OutfilePath\$($TimeStamp)_$($OutputFilePrefix)cpr_finder_result_parsed.csv"
+$OutFullLog   = "$OutfilePath\$($TimeStamp)_$($OutputFilePrefix)cpr_finder_filelocatorpro_FullResult.csv"
+
+Add-Content -Path $OutFullLog -Value 'Name	Location	Modified	Hits	Line	Text' -ErrorAction SilentlyContinue
+ 
+if (!$(Test-Path -Path $OutFullLog)) 
+{
+    Write-Host '||' -NoNewline
+    Write-Host " Exiting. Could not create $OutFullLog. Ensure it only contains valid file name characters." -ForegroundColor Red 
+    Exit 
+}
+
+$LogFile      = "$OutfilePath\$($TimeStamp)_$($OutputFilePrefix)cpr-finder.log"
+
+$ScreenOutput = ''
+
+# AMOUNT OF CPR MATCHES TO LOOP THROUGH IN FILELOCATOR PRO
+# LOWERING THE PARAMETER CAN IMPROVE PERFORMANCE, 
+# HOWEVER BE AWARE THAT IT CAN ALSO RESULT IN FALSE NEGATIVES
+$CPRMatches   = 15
+
+# TARGETS TO EXCLUDE FROM THE SCAN. 
+# YOU CAN ADD TARGETS TO THE LIST. EXAMPLE: $ExclusionList = @("\\server1\sccmshare","sccmshare"), $ signs must be escaped \$.
+$arrExcludedTargetsStatic = @()
 
 # CPR NUMBERS TO EXCLUDE FROM THE SCAN. 
 # YOU CAN ADD CPR NUMBERS TO THE LIST. EXAMPLE: $ExclusionList = @("1111111111","111111110") 
-$ExclusionList = @("") 
+$ExclusionList = @('') 
 
 # ----- SCRIPT CONFIGURATION END ----- #
-
 # ----- BEGIN Invoke-ShareFinder ----- #
 # We have made minor alterations to    #
 # invoke-sharefinder.  The changes are #
@@ -1026,6 +1053,7 @@ function Get-NetComputers {
         }
         catch{
             Write-Warning "The specified domain $Domain does not exist, could not be contacted, or there isn't an existing trust."
+            Write-Log -Level Warn -Message "The specified domain $Domain does not exist, could not be contacted, or there isn't an existing trust." 
         }
     }
     else{
@@ -1161,7 +1189,7 @@ Function AddShareObject {
     #>
     param 
     (
-        [String]$ShareName = ""
+        [String]$ShareName = ''
     )
     $ShareObject = New-Object PSObject
         $ShareObject | Add-Member -type NoteProperty -Name 'ShareName' -Value $ShareName
@@ -1177,7 +1205,7 @@ function Invoke-ShareFinder {
         Finds (non-standard) shares on machines in the domain.
 
         Author: @harmj0y
-        Minor alterations by: @our_name
+        Minor alterations by: @defendaton
         
         .DESCRIPTION
         This function finds the local domain name for a host using Get-NetDomain,
@@ -1667,58 +1695,260 @@ $Netapi32 = $Types['netapi32']
 # ----------------------------------- #
 # ------ END Invoke-ShareFinder ----- #
 
+# ------ BEGIN CPR-Finder Functions ----- #
+Function PauseAndClose
+{
+    Write-Host '||' -NoNewline
+    Write-Host ' Exiting...' -ForegroundColor Red 
+    Exit
+}
 
+Function Set-ProcessPriorityBelowNormal 
+{
+    param 
+    (
+        [Parameter(Mandatory=$true)]
+            [string]$ProcessPath
+    )
+    # set process to run below normal priority to keep server responsive
+    (Get-Process | Where-Object {$_.Path -eq $ProcessPath}).PriorityClass = 'BelowNormal' 
+}
+
+Function Check-IsProcessRunning 
+{     
+     $ReturnValue = $False
+     $result = $null
+     $result = (Get-Process -ErrorAction SilentlyContinue |Where-Object name -in 'flpsearch','FileLocatorPro')
+     if ( $result -ne $null )
+     {
+        $ReturnValue = $true
+     }
+     return $ReturnValue
+}
+
+function Write-Log 
+{ 
+    [CmdletBinding()] 
+    Param 
+    ( 
+        [Parameter(Mandatory=$true, 
+                   ValueFromPipelineByPropertyName=$true)] 
+        [ValidateNotNullOrEmpty()] 
+        [Alias('LogContent')] 
+        [string]$Message, 
+ 
+        [Alias('LogPath')] 
+        [string]$Path=$LogFile, 
+         
+        [ValidateSet('Error','Warn','Info')] 
+        [string]$Level='Info'
+         
+    ) 
+ 
+    Begin 
+    { 
+        # Set VerbosePreference to Continue so that verbose messages are displayed. 
+        if ($PSBoundParameters['Debug'] -or $DebugVerbose.IsPresent) {$VerbosePreference = 'Continue' }
+    }
+
+    Process 
+    { 
+        # If attempting to write to a log file in a folder/path that doesn't exist create the file including the path. 
+        if (!(Test-Path -Path $Path)) 
+        { 
+            Write-Verbose -Message "Creating $Path." 
+            $NewLogFile = New-Item -Path $Path -Force -ItemType File 
+        } 
+        $FormattedDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss' 
+ 
+        # Write message to error, warning, or verbose pipeline and specify $LevelText 
+        switch ($Level) { 
+            'Error' { 
+                if ($PSBoundParameters['Debug'] -or $DebugVerbose.IsPresent) {Write-Error -Message $Message }
+                $LevelText = 'ERROR:' 
+                } 
+            'Warn' { 
+                if ($PSBoundParameters['Debug'] -or $DebugVerbose.IsPresent) { Write-Warning -Message $Message }
+                $LevelText = 'WARNING:' 
+                } 
+            'Info' { 
+                if ($PSBoundParameters['Debug'] -or $DebugVerbose.IsPresent) {Write-Verbose -Message $Message }
+                $LevelText = 'INFO:' 
+                } 
+            } 
+         
+        # Write log entry to $Path 
+        "$FormattedDate $LevelText $Message" | Out-File -FilePath $Path -Append 
+    } 
+    End 
+    { 
+    } 
+}
+
+Function ReadStats
+{
+    if (Test-Path -path $OutFileFLPSearch)
+    { 
+        $InputFile = Get-Content -path $OutFileFLPSearch
+        $fileCreationTime = get-date -Date (Get-Item -Path "$OutFileFLPSearch").CreationTime -UFormat '%Y-%m-%d'
+        $i = 0
+        ForEach ($Line in $InputFile)
+        {  
+            $i++
+            if ($i -lt 19 ) 
+            {
+                if ($Line.StartsWith('Searched:') -or ($Line.StartsWith('Checked:')))
+                {
+                    $tempLine  = $line -replace ".*:|`t",'' -replace ' items?\s' -replace ' ' -replace '([,)])'
+                    $arrStatus = $tempLine.Split('(') 
+                    $BytesUnit = $arrStatus[1].Substring($($arrStatus[1].Length) - 2,2)
+                    $bytes     = $arrStatus[1].Substring(0,$arrStatus[1].Length -2)/1
+                    switch ($BytesUnit)
+                    {
+                        KB
+                        {
+                            $bytes /= (1024*1024)    
+                        }
+                        MB
+                        {
+                            $bytes /= 1024  
+                        }
+                        TB
+                        {
+                            $bytes *= 1024
+                        }
+                
+                    }
+                    if ($Line.StartsWith('Searched:')) 
+                    {               
+                       $script:SearchedGB    += $bytes
+                       $script:SearchedItems += $ArrStatus[0]
+                     }
+                    else
+                    {
+                        $script:CheckedGB    += $bytes
+                        $script:CheckedItems += $arrStatus[0]
+                    }      
+                }
+            }
+            else
+            { 
+                Add-Content -Path $OutFullLog -Value $Line
+            }
+        }
+    } 
+    Write-Log -Level Info -Message "Reading stats CheckedItems:$CheckedItems SearchedItems:$SearchedItems CheckedGB:$([math]::Round($CheckedGB,2)) SearchedGB:$([math]::Round($SearchedGB,2))"
+}
+
+# ------ BEGIN Progress Bar Functions ----- #
+Function ShowScanProgressShare 
+{
+    param
+    (    
+        [Parameter(Mandatory=$true)]
+            [string]$ShareName,
+        [Parameter(Mandatory=$true)]
+            [int]$TotalShares,
+        [Parameter(Mandatory=$true)]
+            [int]$IterationShare
+    )
+    Write-Progress -Activity "|| Start time: $(get-date) - Scanning $($sharename.Split('\\',[StringSplitOptions]::RemoveEmptyEntries)|Select-Object -first 1) for CPR-numbers looking in $ShareName."  -Status "|| Scanning $IterationShare/$TotalShares shares." -PercentComplete ($IterationShare / $TotalShares * 100) -Id 1
+}
+
+Function ShowScanProgress 
+{
+    param
+    (    
+        [Parameter(Mandatory=$true)]
+            [string]$ComputerName,
+        [Parameter(Mandatory=$true)]
+            [int]$TotalComputers,
+        [Parameter(Mandatory=$true)]
+            [int]$IterationComputer
+    )
+    Write-Progress -Activity "|| Scanning $ComputerName (progressbar can fluctuate as data volume vary.)" -Status "|| Scanning $IterationComputer/$TotalComputers computers" -PercentComplete ($IterationComputer / $TotalComputers * 100)   
+}
+
+Function ShowScanProgressScanTarget 
+{
+    [CmdletBinding()]
+    param
+    (
+        [string]$FileName
+    )
+
+    if (Test-Path -Path $FileName)
+    {
+        $LastLines = Get-Content -Path $FileName -Tail 52
+    
+  
+        $LastShareOrDrive = ''
+
+        foreach($line in $LastLines)
+        { 
+            if ($line.StartsWith('\\')) 
+            {
+                $ArrLine           = $Line.Split("`t")
+                $FullFilePath      = $ArrLine[0]
+                $ArrFullFilePath   = $FullFilePath.Split('\')
+                $ComputerName      = $ArrFullFilePath[2]
+                $FirstFolderName   = $ArrFullFilePath[3]
+                $ShareName         = "\\$ComputerName\$FirstFolderName"
+                $LastShareOrDrive  = $ShareName 
+            }
+            elseif ($line -like '[A-z]:\*')
+            {
+                $LastShareOrDrive  = $line.Substring(0,2) 
+            }
+
+        }
+        $Tab = [char]9
+
+        $ArrShareList = $SearchTarget.Split(';')
+        $SearchTargetLength = $ArrShareList.Count
+
+        if ($ArrShareList.Contains($LastShareOrDrive) -or $LastShareOrDrive -ne '')
+        {            [int]$ShareIndex = $ArrShareList.IndexOf($LastShareOrDrive) + 1 
+            if ($SearchTargetLength -gt 1) 
+            {
+                Write-Progress -Activity '|| Scanning (progressbar can fluctuate as data volume vary)'  -Status "|| Scanning $ShareIndex/$SearchTargetLength drives" -PercentComplete ($ShareIndex / $SearchTargetLength * 100)              
+            }
+        }
+    }
+    else 
+    { 
+        Write-Host '||' -NoNewline
+        Write-Host " File does not exist ($OutFileFLPSearch)." -ForegroundColor Red 
+        PauseAndClose 
+    }
+}
+# ------ END Progress Bar Functions ----- #
 
 # ------ BEGIN Check-CPRModulus Functions ----- #
 
-Function IsValidDate {
-    <#
-        .SYNOPSIS
-        Check if a date is valud.
+Function IsValidDate 
+{
+    param 
+    (
+        [Parameter(Mandatory=$true)][int]$cpr0,
+        [Parameter(Mandatory=$true)][int]$cpr1,
+        [Parameter(Mandatory=$true)][int]$cpr2,
+        [Parameter(Mandatory=$true)][int]$cpr3
+    )  
 
-        Author:  @our_name
-        
-        .DESCRIPTION
-        Check if a date is valud.
-
-    #>
-param (
-    [Parameter(Mandatory=$true)][int]$cpr0,
-    [Parameter(Mandatory=$true)][int]$cpr1,
-    [Parameter(Mandatory=$true)][int]$cpr2,
-    [Parameter(Mandatory=$true)][int]$cpr3
-)  
-
-    if ((("$cpr2$cpr3") -gt 12) -or (("$cpr0$cpr1") -gt 31)) 
-    {
-        $IsValidDate = $false
-    }
-    else 
-    {
-        $IsValidDate = $true
-    }
+    if ((("$cpr2$cpr3") -gt 12) -or (("$cpr0$cpr1") -gt 31)) { $IsValidDate = $false }
+    else { $IsValidDate = $true }
 
     return $IsValidDate
 }
 
-function IsNumeric {
-    <#
-        .SYNOPSIS
-        Returns true if input is numeric.
+function IsNumeric 
+{
+    param
+    (
+        [Parameter(Mandatory=$true)]$x
+    )
 
-        Author:  @our_name
-        
-        .DESCRIPTION
-        Returns true if input is numeric.
-
-
-        .PARAMETER x
-        Something to test
-      #>
-param
-(
-    [Parameter(Mandatory=$true)]$x
-)
     try 
     {
         0 + $x | Out-Null
@@ -1730,41 +1960,41 @@ param
     }
 }
 
-function Check-CPRModulus {
-<#
-    .SYNOPSIS
+function Check-CPRModulus 
+{
+  <#
+      .SYNOPSIS
 
-    Checks if a cpr number (Danish social security number) is modulus 11.
+      Checks if a cpr number (Danish social security number) is modulus 11.
 
-    .DESCRIPTION
+      .DESCRIPTION
 
-    The function checks if the provided cpr number is modulus 11.
+      The function checks if the provided cpr number is modulus 11.
 
-    The following dates are excepted and will always return true
+      The following dates are excepted and will always return true
 
-	1. januar 1960	1. januar 1964	1. januar 1965	1. januar 1966
-	1. januar 1969	1. januar 1970	1. januar 1980	1. januar 1982
-	1. januar 1984	1. januar 1985	1. januar 1986	1. januar 1987
-	1. januar 1988	1. januar 1989	1. januar 1990	1. januar 1992 
+      1. januar 1960	1. januar 1964	1. januar 1965	1. januar 1966
+      1. januar 1969	1. januar 1970	1. januar 1980	1. januar 1982
+      1. januar 1984	1. januar 1985	1. januar 1986	1. januar 1987
+      1. januar 1988	1. januar 1989	1. januar 1990	1. januar 1992 
 
-    Reference: https://www.cpr.dk/cpr-systemet/personnumre-uden-kontrolciffer-modulus-11-kontrol/
+      Reference: https://www.cpr.dk/cpr-systemet/personnumre-uden-kontrolciffer-modulus-11-kontrol/
 
-    .PARAMETER cpr
+      .PARAMETER cpr
 
-    The cpr number that will be modulus 11 checked.
+      The cpr number that will be modulus 11 checked.
 
-    .OUTPUTS
-    $True/$False
+      .OUTPUTS
+      $True/$False
 
-    .EXAMPLE
+      .EXAMPLE
 
-    $IsCPRNumber = Check-CPRModules -cpr "111111-1111"
-#>
-
-param 
-(
-    [Parameter(Mandatory=$true)][string]$cpr
-)
+      $IsCPRNumber = Check-CPRModules -cpr "111111-1111"
+  #>
+    param 
+    (
+        [Parameter(Mandatory=$true)][string]$cpr
+    )
     # check cpr is one of the dates where modulus 11 is not applicable 
     # https://www.cpr.dk/cpr-systemet/personnumre-uden-kontrolciffer-modulus-11-kontrol/
     $CprsWithoutModulusCheck = @('010160', '010164', '010165', '010166', 
@@ -1779,9 +2009,7 @@ param
     $cprExists = $false
 
     # IF INPUT IS NOT 9 OR 10 CHARACTERS
-    if ($cpr.Length -lt 9 -or $cpr.Length -gt 10) {  }
-    else 
-    {
+    if (!($cpr.Length -lt 9 -or $cpr.Length -gt 10)) {
         if ($CprsWithoutModulusCheck.Contains( $cpr.Substring(0,6)))
         {
             $cprExists = $true
@@ -1806,13 +2034,13 @@ param
             }
             else
             {
-                $cpr9=""
+                $cpr9=''
             }
 
             # IF THE DATE IS NOT VALID - RETURN FALSE (WILL NOT RETURN)
             if ((IsValidDate -cpr0 $cpr0 -cpr1 $cpr1 -cpr2 $cpr2 -cpr3 $cpr3) -eq $false) { return $cprExists}
 
-            if ($cpr -ne "") 
+            if ($cpr -ne '') 
             {
                 [decimal]$findCPR  = ( $cpr0 * 4 ) + ( $cpr1 * 3 ) + ( $cpr2 * 2 ) + ( $cpr3 * 7 ) + ( $cpr4 * 6 ) + ( $cpr5 * 5 ) + ( $cpr6 * 4 )  + ( $cpr7 * 3 ) + ( $cpr8 * 2 ) 
                 $cprtest2 = ( $findCPR/11 - [math]::floor( $findCPR / 11 ) ) * 11
@@ -1829,7 +2057,7 @@ param
                 } 
 
                 $cprGuess = 11 - $cprtest3
-                if ($cpr9 -ne "") 
+                if ($cpr9 -ne '') 
                 {
                     if ($cpr9 -eq $cprGuess) 
                     {
@@ -1845,96 +2073,8 @@ param
 
 # ------ END Check-CPRModulus Functions ----- #
 
-
-Function Set-ProcessPriorityBelowNormal {
-    <#
-        .SYNOPSIS
-        Changes the priority for the processpath to below normal.
-
-        .DESCRIPTION
-        Changes the priority for the processpath to below normal.
-        This prevents systems becomming unresponsive when running cpr-finder.
-
-
-        .PARAMETER ProcessPath
-        Path to the process, for which you would like to change priority to below normla.
-     #>
-    param (
-        [Parameter(Mandatory=$true)]
-            [string]$ProcessPath
-    )
-    # set process to run below normal priority to keep server responsive
-    (Get-Process | Where-Object {$_.Path -eq $ProcessPath}).PriorityClass = "BelowNormal" 
-}
-
-Function Check-IsProcessRunning {
-    <#
-        .SYNOPSIS
-        Checks if the a scan is already in progress.
-
-        .DESCRIPTION
-        Checks if the a scan is already in progress, to prevent starting multiple scans at once.
-
-        .PARAMETER ProcessPath
-        Path to the process.
-     #>
-        
-     $ReturnValue = $False
-     $result= $null;$result=(Get-Process -ErrorAction SilentlyContinue |? name -in "flpsearch","FileLocatorPro")
-     if ( $result -ne $null )
-     {
-        $Returnvalue = $True
-        $result
-     }
-}
-
-
-Function ShowScanProgress 
+Function Run-Scanner
 {
-    $LastLines = Get-Content $OutFileFLPSearch -tail 52
-    $LastShareOrDrive = ""
-
-    foreach($line in $LastLines)
-    { 
-        if ($line.StartsWith("\\")) 
-        {
-            $ArrLine           = $Line.Split("`t")
-            $FullFilePath      = $ArrLine[0]
-            $ArrFullFilePath   = $FullFilePath.Split('\')
-            $ComputerName      = $ArrFullFilePath[2]
-            $FirstFolderName   = $ArrFullFilePath[3]
-            $ShareName         = "\\$ComputerName\$FirstFolderName"
-            $LastShareOrDrive  = $ShareName 
-        }
-        elseif ($line -like '[A-z]:\*')
-        {
-            $LastShareOrDrive  = $line.Substring(0,2) 
-        }
-    }
-
-    $ArrShareList = $SearchTarget.Split(';')
-    $SearchTargetLength = $ArrShareList.Count
-
-    if ($ArrShareList.Contains($LastShareOrDrive) -or $LastShareOrDrive -ne "")
-    {
-        [int]$ShareIndex = $ArrShareList.IndexOf($LastShareOrDrive) + 1 
-        
-        if ($SearchTargetLength -gt 1) 
-        {
-            if ($ScanMode.Contains("DomainMode")) 
-            {
-                Write-Progress -Activity "|| Scanning (progressbar can fluctuate, due to multithreaded nature of the scanner)" -Status "|| Scanning $ShareIndex/$SearchTargetLength shares" -PercentComplete ($ShareIndex / $SearchTargetLength * 100)     
-            }  
-            else 
-            {
-                Write-Progress -Activity "|| Scanning (progressbar can fluctuate, due to multithreaded nature of the scanner)" -Status "|| Scanning $ShareIndex/$SearchTargetLength drives" -PercentComplete ($ShareIndex / $SearchTargetLength * 100)  
-            } 
-        }
-    }
-}
-
-
-Function Run-Scanner{
     <#
         .SYNOPSIS
         Runs filelocator pro.
@@ -1946,10 +2086,9 @@ Function Run-Scanner{
         flpsearchpath, path to the executable
         flpsearchCriteriaPath, parth to the predefined search criteria.
         ShareList, list of shares to scan
-        OutFileFlpSearch output path.
-        StartGui, if set to true the search will start with GUI
-     #>
-    # https://help.mythicsoft.com/filelocatorpro/en/commandline.htm
+        $OutFileName output path.
+        StartGui, if set to true the search will start File LocatorPro with GUI
+    #>
     param (
     [Parameter(Mandatory=$true)]
         [string]$flpsearchPath,
@@ -1958,58 +2097,64 @@ Function Run-Scanner{
     [Parameter(Mandatory=$true)]
         [string]$ShareList,
     [Parameter(Mandatory=$true)]
-        [string]$OutFileFLPSearch,
-    [Parameter(Mandatory=$false)]
-        [switch]$StartGui
+        [string]$OutFileName,
+        [switch]$StartGui,
+        [switch]$Append,
+        [string]$ComputerName,
+        [int]$TotalComputers,
+        [int]$IterationComputer
     )
-
+    Write-Log -Message "Scanning $Sharelist"
+    Write-Log -Message "Run-Scanner FlpsearchPath:$flpsearchPath flpsearchCriteriaPath:$flpsearchCriteriaPath ShareList:$ShareList OutFileName:$OutFileName StartGui:$StartGui Append:$Append ComputerName:$ComputerName TotalComputers:$TotalComputers IterationComputer:$IterationComputer"
     # run filelocater pro
-    Write-Host "|| Searching for CPR-Numbers." 
-    Write-Host "|| Starting external application, this can take a while."
-     
     if ($StartGui.IsPresent) 
     { 
-        Write-Host "|| Running in GUI mode. This is for " -NoNewline
-        write-host "illustration only" -NoNewline -ForegroundColor Yellow
-        Write-host ". The result will not be used and parsed!"
-        Write-Host "|| GUI-mode allows you to see if the scan is actually running. Once that has been confirmed, restart wihtout -StartGUI."
-
-        & $flpsearchPath $flpsearchCriteriaPath -d $ShareList -oeu -ofb -oc -ol 50 -pc     
+        Write-Host '|| Running in GUI mode. This is for ' -NoNewline
+        write-host 'illustration only' -NoNewline -ForegroundColor Yellow
+        Write-host '. The result will not be used and parsed!'
+        Write-Host '|| GUI-mode allows you to see if the scan is actually running. Once that has been confirmed, restart wihtout -StartGUI.'
+        
+        & $flpsearchPath $flpsearchCriteriaPath -oeu -ofb -oc -ol 50 -pc -d $($ShareList.Replace("'","")) 
+           
         PauseAndClose
     } 
     else 
     { 
+        if ($Append.IsPresent)
+        {           
+           Start-Process -FilePath $flpsearchPath -ArgumentList $flpsearchCriteriaPath, '-d', $ShareList.Replace("'",'"'), '-ofb',' -o',$OutFileName,'-oeu','-oa','-oc',"-ol $CPRMatches", '-ofrs:tabulated','-ofr:files','-ofr:contents', '-pc' -WindowStyle Minimized
+        }
+        else 
+        {
+             Start-Process -FilePath $flpsearchPath -ArgumentList $flpsearchCriteriaPath, '-d', $ShareList.Replace("'",'"'), '-ofb',' -o',$OutFileName,'-oeu','-oc',"-ol $CPRMatches", '-ofrs:tabulated','-ofr:files','-ofr:contents', '-pc' -WindowStyle Minimized
+        }
+        Start-Sleep -Seconds 2
 
-        Start-Process $flpsearchPath -ArgumentList $flpsearchCriteriaPath, "-d", $ShareList.Replace("'",'"'), "-oeu","-ofb","-oc"," -o",$OutFileFLPSearch,"-ol 50", "-pc"
-        sleep 2
-        try { Set-ProcessPriorityBelowNormal -ProcessPath $flpsearchPath}
-        catch { sleep 10 }    
-
+        try 
+        { 
+            Set-ProcessPriorityBelowNormal -ProcessPath $flpsearchPath
+            Set-ProcessPriorityBelowNormal -ProcessPath $flpConvertPath
+        }
+        catch { }    
+        
         #LOOP, WHILE SCAN IS RUNNING
         Do
         {
-            ShowScanProgress
-            Start-Sleep 10
-        }while (Get-Process -Name flpsearch -ErrorAction SilentlyContinue)
+            try 
+            { 
+                Set-ProcessPriorityBelowNormal -ProcessPath $flpConvertPath
+            }
+            catch { } 
+            $proc = Get-Process
+            Start-Sleep -Seconds 2
+        }while ($proc.name -contains 'flpsearch')
     }
-    Write-Host "|| " -NoNewline
-    Write-Host "Scan complete." -ForegroundColor Green
-}
 
+}
 
 Function IsInExclusionList 
 {
-    <#
-        .SYNOPSIS
-       Exception list, if a commonly known "real" CPR number is used for internal test, it can be excluded from the search.
-        
-        .DESCRIPTION
-       Exception list, if a commonly known "real" CPR number is used for internal test, it can be excluded from the search.
-
-        .PARAMETER cpr
-        The CPR number check against the exclude list.
-     #>
-
+    [CmdletBinding()]
     param ([string]$cpr)
    
     if ($ExclusionList.contains($cpr)) { return $true }
@@ -2017,98 +2162,75 @@ Function IsInExclusionList
     
 }
 
-Function AddFileObject {
-  <#
-       .SYNOPSIS
-       Internal function which adds file information to a collection.
+Function AddFileObject 
+{
 
-        Author:  @our_name
-        
-        .DESCRIPTION
-        Internal function which adds file information to a collection.
-
-        .PARAMETER ProcessPath
-        
-     #>
+    [CmdletBinding()]
     param 
     (
-        [String]$ComputerName = "",
-        [String]$FullFilePath = "",
-        [String]$FileLink = "",
-        [String]$FileName = "",
-        [String]$ShareName = "",
-        [String]$FileSize = "",
-        [String]$DocumentType = "",
-        [String]$CreationDate = "",
-        [String]$ModifyDate = "",
-        [String]$LastAccessDate = "",
-        [String]$FileOwner = "",       
-        [String]$ModulusConfirmed = "",
-        [String]$OnExclusionList = "",
-        [String]$FirstMatchedCPR = ""
+        [String]$ComputerName = '',
+        [String]$FullFilePath = '',
+        [String]$FileLink = '',
+        [String]$FileName = '',
+        [String]$ShareName = '',
+        [String]$FileSize = '',
+        [String]$DocumentType = '',
+        [String]$CreationDate = '',
+        [String]$ModifyDate = '',
+        [String]$LastAccessDate = '',
+        [String]$FileOwner = '',       
+        [String]$ModulusConfirmed = '',
+        [String]$OnExclusionList = '',
+        [String]$FirstMatchedCPR = ''
     )
-    if ($ScanMode.Contains("DomainMode")) 
+    if ($ScanMode.Contains('DomainMode')) 
     {
-        $FileObject = New-Object PSObject
-            $FileObject | Add-Member -type NoteProperty -Name 'ComputerName' -Value $ComputerName
-            $FileObject | Add-Member -type NoteProperty -Name 'FullFilePath' -Value $FullFilePath
-            $FileObject | Add-Member -type NoteProperty -Name 'FileLink' -Value $FileLink
-            $FileObject | Add-Member -type NoteProperty -Name 'FileName' -Value $FileName
-            $FileObject | Add-Member -type NoteProperty -Name 'ShareName' -Value $ShareName
-            $FileObject | Add-Member -type NoteProperty -Name 'FileSize' -Value $FileSize
-            $FileObject | Add-Member -type NoteProperty -Name 'DocumentType' -Value $DocumentType
-            $FileObject | Add-Member -type NoteProperty -Name 'CreationDate' -Value $CreationDate
-            $FileObject | Add-Member -type NoteProperty -Name 'ModifyDate' -Value $ModifyDate
-            $FileObject | Add-Member -type NoteProperty -Name 'LastAccessDate' -Value $LastAccessDate
-            $FileObject | Add-Member -type NoteProperty -Name 'FileOwner' -Value $FileOwner
-            $FileObject | Add-Member -type NoteProperty -Name 'ModulusConfirmed' -Value $ModulusConfirmed
-            $FileObject | Add-Member -type NoteProperty -Name 'OnExclusionList' -Value $OnExclusionList
+        $FileObject = New-Object -TypeName PSObject
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'ComputerName' -Value $ComputerName
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FullFilePath' -Value $FullFilePath
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FileLink' -Value $FileLink
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FileName' -Value $FileName
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'ShareName' -Value $ShareName
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'ModifyDate' -Value $ModifyDate
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FileOwner' -Value $FileOwner
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'ModulusConfirmed' -Value $ModulusConfirmed
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'OnExclusionList' -Value $OnExclusionList
     }
     elseif ($IncludeCPRInOutput.IsPresent)
     {
-            $FileObject = New-Object PSObject
-            $FileObject | Add-Member -type NoteProperty -Name 'ComputerName' -Value $ComputerName
-            $FileObject | Add-Member -type NoteProperty -Name 'FullFilePath' -Value $FullFilePath
-            $FileObject | Add-Member -type NoteProperty -Name 'FileLink' -Value $FileLink
-            $FileObject | Add-Member -type NoteProperty -Name 'FileName' -Value $FileName
-            $FileObject | Add-Member -type NoteProperty -Name 'ShareName' -Value $ShareName
-            $FileObject | Add-Member -type NoteProperty -Name 'FileSize' -Value $FileSize
-            $FileObject | Add-Member -type NoteProperty -Name 'DocumentType' -Value $DocumentType
-            $FileObject | Add-Member -type NoteProperty -Name 'CreationDate' -Value $CreationDate
-            $FileObject | Add-Member -type NoteProperty -Name 'ModifyDate' -Value $ModifyDate
-            $FileObject | Add-Member -type NoteProperty -Name 'LastAccessDate' -Value $LastAccessDate
-            $FileObject | Add-Member -type NoteProperty -Name 'FileOwner' -Value $FileOwner
-            $FileObject | Add-Member -type NoteProperty -Name 'ModulusConfirmed' -Value $ModulusConfirmed
-            $FileObject | Add-Member -type NoteProperty -Name 'FirstMatchedCPR' -Value $FirstMatchedCPR
-            $FileObject | Add-Member -type NoteProperty -Name 'OnExclusionList' -Value $OnExclusionList
+            $FileObject = New-Object -TypeName PSObject
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'ComputerName' -Value $ComputerName
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FullFilePath' -Value $FullFilePath
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FileLink' -Value $FileLink
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FileName' -Value $FileName
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'ShareName' -Value $ShareName
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'ModifyDate' -Value $ModifyDate
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FileOwner' -Value $FileOwner
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'ModulusConfirmed' -Value $ModulusConfirmed
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FirstMatchedCPR' -Value $FirstMatchedCPR
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'OnExclusionList' -Value $OnExclusionList
     } 
     else
     {
-        $FileObject = New-Object PSObject
-            $FileObject | Add-Member -type NoteProperty -Name 'ComputerName' -Value $ComputerName
-            $FileObject | Add-Member -type NoteProperty -Name 'FullFilePath' -Value $FullFilePath
-            $FileObject | Add-Member -type NoteProperty -Name 'FileLink' -Value $FileLink
-            $FileObject | Add-Member -type NoteProperty -Name 'FileName' -Value $FileName
-            $FileObject | Add-Member -type NoteProperty -Name 'FileSize' -Value $FileSize
-            $FileObject | Add-Member -type NoteProperty -Name 'DocumentType' -Value $DocumentType
-            $FileObject | Add-Member -type NoteProperty -Name 'CreationDate' -Value $CreationDate
-            $FileObject | Add-Member -type NoteProperty -Name 'ModifyDate' -Value $ModifyDate
-            $FileObject | Add-Member -type NoteProperty -Name 'LastAccessDate' -Value $LastAccessDate
-            $FileObject | Add-Member -type NoteProperty -Name 'FileOwner' -Value $FileOwner
-            $FileObject | Add-Member -type NoteProperty -Name 'ModulusConfirmed' -Value $ModulusConfirmed
-            $FileObject | Add-Member -type NoteProperty -Name 'OnExclusionList' -Value $OnExclusionList
+        $FileObject = New-Object -TypeName PSObject
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'ComputerName' -Value $ComputerName
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FullFilePath' -Value $FullFilePath
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FileLink' -Value $FileLink
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FileName' -Value $FileName
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'ModifyDate' -Value $ModifyDate
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'FileOwner' -Value $FileOwner
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'ModulusConfirmed' -Value $ModulusConfirmed
+            $FileObject | Add-Member -MemberType NoteProperty -Name 'OnExclusionList' -Value $OnExclusionList
     }
     return $FileObject 
 }
 
-Function ParseOutputFile {
-  <#
+Function ParseOutputFile 
+{  
+    <#
         .SYNOPSIS
         Parsing output file from filelocator pro into a readable format.
 
-        
-        Author:  @our_name
-        
         .DESCRIPTION
         This function parses the output once the scan has been complated.
         During the parsing process multiple steps are performed.
@@ -2125,8 +2247,7 @@ Function ParseOutputFile {
         .PARAMETER ProcessPath
         ExportHTML, if set to true export will be as html
         ExprotCsv, if set to true export will be as csv
-     #>
-
+    #>
 
     Set-StrictMode -Version 1
 
@@ -2144,223 +2265,162 @@ Function ParseOutputFile {
     $DateTimeFormat        = "$DateFormat $TimeFormat"
 
     $ExclusionList         = $ExclusionList.replace('-','')
-    
 
-    try 
+    # create empty object to include file objects with cpr number
+    $Files = @()
+
+    if (Test-Path -path $OutFullLog)
     { 
-        $InputFile = Get-Content -path $OutFileFLPSearch
+        $InputFile = Get-Content -path $OutFullLog
     } 
-    catch 
+    else 
     { 
-        "File does not exist ($OutFileFLPSearch)" 
+        Write-Host '||' -NoNewline
+        Write-Host " File does not exist ($OutFullLog)." -ForegroundColor Red 
+        Write-Log -Level Warn -Message "File does not exist ($OutFullLog)."
         PauseAndClose
     }
 
-    $fileCreationTime = get-date (Get-Item $OutFileFLPSearch).CreationTime -UFormat "%Y-%m-%d"
-    $Files = @()
-    Write-Host "|| Parsing output."
-
-    foreach($line in $InputFile)
-    { 
+    $fileCreationTime = get-date -Date (Get-Item -Path "$OutFullLog").CreationTime -UFormat '%Y-%m-%d'
         
+    Write-Host '|| Parsing output'
+    Write-Log -Level Info -Message "Parsing output in $OutFullLog."
+    [bool]$FileMet = $false
+    $FullFilePath = ''
+
+    ForEach ($Line in $InputFile)
+    {   
+        if ($Line.StartsWith('Name'))
+        {
+            [bool]$FileMet = $true
+        }
         # .pst files are handles slightly different and other files
-        if (($line.StartsWith("\\") -or  $line -like '[A-z]:\*') -and ($line.contains(".pst\") -or $line.contains(".zip\") -or $line.contains(".ost\")) ) 
+        elseif (($FileMet -and $Line.Length -ne 0) -or $Line -like '[A-z]:\*') 
         {
             # RESET MODULUS CHECK VARIABLE
             $IsModulusConfirmed  = 0
-            $HandlingPSTFile     = 1
             $OnExclusionList     = 0 
-            $FilesHandled        = $FilesHandled + 1
+
             $FirstMatchedCPRTemp = ''
 
             # SPLIT LINE AND STORE VARIABLES
-            $ArrLine            = $Line.Split("`t")
-
-            if ($line.Contains(".zip\")) { [int]$IndexZip = $line.IndexOf(".zip\") }
-            else { [int]$IndexZip = 100000 }
-            if ($line.Contains(".pst\")) { [int]$IndexPST = $line.IndexOf(".pst\") }
-            else { [int]$IndexPST = 100000 }
-            if ($line.Contains(".ost\")) { [int]$IndexOST = $line.IndexOf(".ost\") }
-            else { [int]$IndexOST = 100000 }
-
-            $MinimumIndexTemp = [int] $IndexZip, $IndexPST, $IndexOST
-
-            $MinimumIndex = ($MinimumIndexTemp | measure -Minimum).Minimum
-
-            $FileLink           = $ArrLine[0].Substring(0, $MinimumIndex +4)
-            $FullFilePath       = $ArrLine[0]
-            $FileSize           = $ArrLine[1]
-            $DocumentType       = $ArrLine[2]  
-                   
-            $CreationDate   = [DateTime]::ParseExact($ArrLine[3],$DateTimeFormat,$null)
-            $ModifyDate     = [DateTime]::ParseExact($ArrLine[4],$DateTimeFormat,$null)
-            $LastAccessDate = [DateTime]::ParseExact($ArrLine[5],$DateTimeFormat,$null)
-            $AmountLines    = $ArrLine[6]
-
-            # PARSE FULLFILEPATH AND STORE VARIABLES
-            if ($ScanMode.Contains("DomainMode") -or $line.StartsWith("\\"))
+            $ArrLine             = $Line.Split("`t")
+            $FullFilePathTemp    = $ArrLine[1]+''+$ArrLine[0]
+            if ($FullFilePathTemp -ne $FullFilePath)
             {
-                $ArrFullFilePath = $FullFilePath.Split('\')
-                $ComputerName    = $ArrFullFilePath[2]
-                $FirstFolderName = $ArrFullFilePath[3]
-                $FileName        = $ArrFullFilePath[-1]
-                $ShareName       = "\\$ComputerName\$FirstFolderName"
-            }
-            else 
-            {
-                $ArrFullFilePath = $FullFilePath.Split('\')
-                $ComputerName    = $env:COMPUTERNAME
-                $FirstFolderName = $ArrFullFilePath[1]
-                $FileName        = $ArrFullFilePath[-1]
-                $ShareName       = "\\$ComputerName\$FirstFolderName"
-            }
+                $FilesHandled        = $FilesHandled + 1
+                $FileName            = $ArrLine[0]
+                $Location            = $ArrLine[1]
+                $FullFilePath        = "$Location$FileName"
+                $FileLink            = $FullFilePath
 
+                if ($Line.contains('.pst\') -or $Line.contains('.zip\') -or $Line.contains('.ost\') -or $Line.contains('.7z\'))
+                {                    
+                    if ($line.Contains('.zip\')) { $FileLink = ($FullFilePath -Split '.zip\\')[0] + '.zip' }                    
+                    if ($line.Contains('.pst\')) { $FileLink = ($FullFilePath -Split '.pst\\')[0] + '.pst'}
+                    if ($line.Contains('.ost\')) { $FileLink = ($FullFilePath -Split '.ost\\')[0] + '.ost'}
+                    if ($line.Contains('.7z\'))  { $FileLink = ($FullFilePath -Split '.7z\\')[0] + '.7z'}
+                }
+           
+                $cpr = $ArrLine[5]
+                try { $ModifyDate    = [DateTime]::ParseExact($ArrLine[2],$DateTimeFormat,$null)  }
+                catch { $ModifyDate  = '' }
+                
 
-            if (Test-Path $FullFilePath) 
-            {
-                $FileOwner = $(Get-ChildItem $FullFilePath | Select @{Name="Owner";Expression={(Get-ACL $_.Fullname).Owner}}).owner 
-            }  
-        }
-        elseif ($line.StartsWith("\\") -or $line -like '[A-z]:\*')
-        {       
+                # PARSE FULLFILEPATH AND STORE VARIABLES
+                if ($ScanMode.Contains('DomainMode') -or $Line.StartsWith('\\'))
+                {
+                    $ArrFullFilePath = $FullFilePath.Split('\')
+                    $ComputerName    = $ArrFullFilePath[2]
+                    $FirstFolderName = $ArrFullFilePath[3]
+                    $FileName        = $ArrFullFilePath[-1]
+                    $ShareName       = "\\$ComputerName\$FirstFolderName"
+                }
+                else 
+                {
+                    $ArrFullFilePath = $FullFilePath.Split('\')
+                    $ComputerName    = $env:COMPUTERNAME
+                    $FirstFolderName = $ArrFullFilePath[1]
+                    $FileName        = $ArrFullFilePath[-1]
+                    $ShareName       = "\\$ComputerName\$FirstFolderName"
+                }
 
-            $FilesHandled       = $FilesHandled + 1
+                if (Test-Path -Path $FullFilePath) 
+                {
+                    $FileOwner = $(Get-ChildItem -Path $FullFilePath | Select-Object -Property @{Name='Owner';Expression={(Get-ACL -Path $_.Fullname).Owner}}).owner 
+                }  
+                else
+                {
+                    $FileOwner = ''
+                }
 
-            # RESET MODULUS CHECK VARIABLE 
-            $IsModulusConfirmed  = 0 
-            $OnExclusionList     = 0 
-            $HandlingPSTFile     = 0
-            $FirstMatchedCPRTemp = ''
+                if ($cpr.length -gt 10) { $cpr = $cpr.Substring(0,11).Replace('-','').trim() }
+                if ($cpr.length -eq 11) { $cpr =  $cpr.Substring(0,10) }
+            
+                if ($(IsInExclusionList -cpr $cpr) -eq $false)   {  $OnExclusionList = 0 }
+                else { $OnExclusionList = 1 }
 
-            # SPLIT LINE (tab) AND STORE VARIABLES
-            $ArrLine        = $Line.Split("`t")
-            $FullFilePath   = $ArrLine[0]
-            $FileLink       = $FullFilePath
-            $FileSize       = $ArrLine[1]
-            $DocumentType   = $ArrLine[2]     
-
-            $CreationDate   = [DateTime]::ParseExact($ArrLine[3],$DateTimeFormat,$null)
-            $ModifyDate     = [DateTime]::ParseExact($ArrLine[4],$DateTimeFormat,$null)
-            $LastAccessDate = [DateTime]::ParseExact($ArrLine[5],$DateTimeFormat,$null)
-            $AmountLines    = $ArrLine[6]
-
-            # PARSE FULLFILEPATH AND STORE VARIABLES
-            if ($ScanMode.Contains("DomainMode") -or $line.StartsWith("\\"))
-            {
-                $ArrFullFilePath = $FullFilePath.Split('\')
-                $ComputerName    = $ArrFullFilePath[2]
-                $FirstFolderName = $ArrFullFilePath[3]
-                $FileName        = $ArrFullFilePath[-1]
-                $ShareName       = "\\$ComputerName\$FirstFolderName"
-            }
-            else 
-            {
-                $ArrFullFilePath = $FullFilePath.Split('\')
-                $ComputerName    = $env:COMPUTERNAME
-                $FirstFolderName = $ArrFullFilePath[1]
-                $FileName        = $ArrFullFilePath[-1]
-                $ShareName       = "\\$ComputerName\$FirstFolderName"
-            }
-
-            if (Test-Path $FullFilePath) 
-            {
-                $FileOwner = $(Get-ChildItem $FullFilePath | Select @{Name="Owner";Expression={(Get-ACL $_.Fullname).Owner}}).owner 
-            } 
-        }
-        elseif ($line -eq "") 
-        {
-            # If line is empty then we have reach a new file, and are no longer handling CPR matches within the same file, thus file will be added to the collection.
-            if ($IncludeCPRInOutput.IsPresent) 
-            {
-                $Files += $(AddFileObject   -ComputerName     $ComputerName        `
-                                            -FullFilePath     $FullFilePath        `
-                                            -FileLink         $FileLink            `
-                                            -FileName         $filename            `
-                                            -ShareName        $ShareName           `
-                                            -FileSize         $FileSize            `
-                                            -DocumentType     $DocumentType        `
-                                            -CreationDate     $CreationDate        `
-                                            -ModifyDate       $ModifyDate          `
-                                            -LastAccessDate   $LastAccessDate      `
-                                            -FileOwner        $FileOwner           `
-                                            -ModulusConfirmed $IsModulusConfirmed  `
-                                            -FirstMatchedCPR  $FirstMatchedCPRTemp `
-                                            -OnExclusionList  $OnExclusionList)
-            }
-            else 
-            {
-                $Files += $(AddFileObject   -ComputerName     $ComputerName        `
-                                            -FullFilePath     $FullFilePath        `
-                                            -FileLink         $FileLink            `
-                                            -FileName         $filename            `
-                                            -ShareName        $ShareName           `
-                                            -FileSize         $FileSize            `
-                                            -DocumentType     $DocumentType        `
-                                            -CreationDate     $CreationDate        `
-                                            -ModifyDate       $ModifyDate          `
-                                            -LastAccessDate   $LastAccessDate      `
-                                            -FileOwner        $FileOwner           `
-                                            -ModulusConfirmed $IsModulusConfirmed  `
-                                            -OnExclusionList  $OnExclusionList)
-            }
-        }
-        else 
-        {            
-            $ArrLine = $line.Split("`t")
-            $cpr = $ArrLine[1]
-
-            if ($cpr.length -gt 10) { $cpr = $cpr.Substring(0,11).Replace('-','').trim() }
-            if ($cpr.length -eq 11) { $cpr =  $cpr.Substring(0,10) }
-
-            if ($(IsInExclusionList -cpr $cpr) -eq $false) 
-            {
-                $OnExclusionList = 0               
-            }
-            else 
-            {
-                $OnExclusionList = 1
-            }
-
-            # If no cpr has yet been confirmed with modulus 11 then check cpr. Otherwise the check is skipped
-            if (($IsModulusConfirmed -eq 0))
-            {
+                # If no cpr has yet been confirmed with modulus 11 then check cpr. Otherwise the check is skipped
+                if (($IsModulusConfirmed -eq 0))
+                {
                     if ($(Check-CprModulus -cpr $cpr) -eq $true) 
                     {
                         $ArrCprModulusConfirmed += $cpr
-                        $IsModulusConfirmed = 1
-                        $FirstMatchedCPRTemp = $cpr
+                        $IsModulusConfirmed      = 1
+                        $FirstMatchedCPRTemp     = $cpr
                         if ($OnExclusionList -eq 1)
                         {
                             $InExclutionListCounter++
                         }
-
                     }
-            }
-        }
-    } 
+                }
 
+                if ($IncludeCPRInOutput.IsPresent) 
+                {
+                    $Files += $(AddFileObject   -ComputerName     $ComputerName        `
+                                                -FullFilePath     $FullFilePath        `
+                                                -FileLink         $FileLink            `
+                                                -FileName         $filename            `
+                                                -ShareName        $ShareName           `
+                                                -ModifyDate       $ModifyDate          `
+                                                -FileOwner        $FileOwner           `
+                                                -ModulusConfirmed $IsModulusConfirmed  `
+                                                -FirstMatchedCPR  $FirstMatchedCPRTemp `
+                                                -OnExclusionList  $OnExclusionList)
+                }
+                else 
+                {
+                    $Files += $(AddFileObject   -ComputerName     $ComputerName        `
+                                                -FullFilePath     $FullFilePath        `
+                                                -FileLink         $FileLink            `
+                                                -FileName         $filename            `
+                                                -ShareName        $ShareName           `
+                                                -ModifyDate       $ModifyDate          `
+                                                -FileOwner        $FileOwner           `
+                                                -ModulusConfirmed $IsModulusConfirmed  `
+                                                -OnExclusionList  $OnExclusionList)
+                }
+            } 
+        } 
+    }
     
-        $Header = @'
-        <style>
-        TABLE {border-width: 1px; border-style: solid; border-color: black; border-collapse: collapse;}
-        TH {border-width: 1px; padding: 3px; border-style: solid; border-color: black; background-color: black; color: white; text-align: left;}
-        TD {border-width: 1px; padding: 3px; border-style: solid; border-color: black;}
-        </style>
+    $Header = @'
+    <style>
+    TABLE {border-width: 1px; border-style: solid; border-color: black; border-collapse: collapse;}
+    TH {border-width: 1px; padding: 3px; border-style: solid; border-color: black; background-color: black; color: white; text-align: left;}
+    TD {border-width: 1px; padding: 3px; border-style: solid; border-color: black;}
+    </style>
 '@
 
     if ($IncludeCPRInOutput.IsPresent) 
     {
         $FilesHelperTable = $Files |
         Where-Object {$_.FullFilePath} |
-            Select ComputerName, `
+            Select-Object -Property ComputerName, `
                     @{n='FullFilePath';e={"<a href='$($_.FileLink)'>$($_.FullFilePath)</a>"}}, `
                     FileName, `
                     ShareName, `
-                    FileSize, `
-                    DocumentType, `
-                    CreationDate,     `
                     ModifyDate,       `
-                    LastAccessDate ,  `
                     FileOwner      ,  `
                     ModulusConfirmed,  `
                     FirstMatchedCPR,
@@ -2370,36 +2430,35 @@ Function ParseOutputFile {
     {
        $FilesHelperTable = $Files |
             Where-Object {$_.FullFilePath} |
-                Select ComputerName, `
+                Select-Object -Property ComputerName, `
                        @{n='FullFilePath';e={"<a href='$($_.FileLink)'>$($_.FullFilePath)</a>"}}, `
                        FileName, `
                        ShareName, `
-                       FileSize, `
-                       DocumentType, `
-                       CreationDate,     `
                        ModifyDate,       `
-                       LastAccessDate ,  `
                        FileOwner      ,  `
                        ModulusConfirmed,
                        OnExclusionList | ConvertTo-Html -Head $Header
     }
 
     Add-Type -AssemblyName System.Web
-    [System.Web.HttpUtility]::HtmlDecode($FilesHelperTable) | Out-File $OutFileHTML
-    $Files | Export-Csv $OutFilecsv -NoTypeInformation 
-    Write-Host "|| " -NoNewline
-    Write-Host "Done " -NoNewline -ForegroundColor Green
-    Write-Host "parsing."
-    Write-Host "|| Generated: " -NoNewline
+    [Web.HttpUtility]::HtmlDecode($FilesHelperTable) | Out-File -FilePath $OutFileHTML
+    $Files | Export-Csv -Path $OutFilecsv -NoTypeInformation 
+    Write-Host '|| ' -NoNewline
+    Write-Host 'Done ' -NoNewline -ForegroundColor Green
+    Write-Host 'parsing.'
+    Write-Host '|| Generated: ' -NoNewline
     Write-Host $OutFileHtml -ForegroundColor Green
-    Write-Host "|| Generated: " -NoNewline
+    Write-Host '|| Generated: ' -NoNewline
     Write-Host $OutFilecsv -ForegroundColor Green
-    Write-Host "|| Files handled " -NoNewline
+    Write-Host '|| Files handled ' -NoNewline
     Write-Host $FilesHandled -ForegroundColor Yellow
-    Write-Host "|| Files with modulus confirmed " -NoNewline
+    Write-Host '|| Files with modulus confirmed ' -NoNewline
     Write-Host $ArrCprModulusConfirmed.Count -ForegroundColor Yellow
-    Write-Host "|| Hereof in exclusionlist " -NoNewline
+    Write-Host '|| Hereof in exclusionlist ' -NoNewline
     Write-Host $InExclutionListCounter -ForegroundColor Yellow
+    Write-Log -Level Info -Message "$OutFileHtml and $OutFilecsv created."
+    Write-Log -Level Info -Message "Files with modulus confirmed $($ArrCprModulusConfirmed.Count) hereof in exclusionlist $InExclutionListCounter"
+    Write-Log -Level Info -Message 'Done Parsing.'
 }
 
 Function ADModuleExistsCheck
@@ -2408,7 +2467,7 @@ Function ADModuleExistsCheck
 
     $OsInfo = $(Get-WmiObject -Class Win32_OperatingSystem).ProductType # Workstation = 1, Domain Controller = 2, Server = 3
      # Check if ad module exists. If not then check if user accepts insallation on the fly
-        if (!(Get-Module -ListAvailable ActiveDirectory)) 
+        if (!(Get-Module -ListAvailable -Name ActiveDirectory)) 
         {         
             $ReturnValue = $false
             Write-Host '|| ' -NoNewline
@@ -2417,234 +2476,325 @@ Function ADModuleExistsCheck
             Write-Host 'Install the module and run the script again.' -ForegroundColor Red
             Write-Host -NoNewLine '|| Press any key to continue...';
             $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+            Write-Log -Level Warn -Message 'The Active Directory Module for Powershell is not installed.'
+            Write-Log -Level Warn -Message 'Install the module and run the script again.'
             PauseAndClose            
         }
         else 
         {
             $ReturnValue = $true
         }
-
     return $ReturnValue
 }
 
-Function DefineSearchTargetDomain
-{
-
-    $ReturnValue = ""
-
-    $ComputerStaleDate = (Get-Date).AddDays(-$ComputerPasswordAgeDays)
-
-    if ($ScanMode -eq "DomainModeServersOnly") 
-    {        
-        $AdComputers = Get-ADComputer -filter {(passwordLastSet -ge $ComputerStaleDate) -and (enabled -eq $true) -and (OperatingSystem -like '*server*') } -properties Name
-        $AdComputers += Get-ADComputer -filter {(passwordLastSet -ge $ComputerStaleDate) -and (enabled -eq $true) -and (OperatingSystem -notlike '*Windows*') } -properties Name
-    }
-    elseif ($ScanMode -eq "DomainModeAll")
-    {
-        $AdComputers = Get-ADComputer -filter {(passwordLastSet -ge $ComputerStaleDate) -and (enabled -eq $true) } -properties Name
-    }
-    
-    $AdComputersCount = $AdComputers.Count
-    
-    Write-Host "|| Found $AdComputersCount computer objects in Active Directory, based on selected search criteria."
-
-    [int]$Counter = 0
-    [int]$ShareCounter = 0
-
-    if ($AdComputersCount -gt 0) 
-    {
-        Write-Host "|| Enumerating shares"
-        ForEach ($AdComputer in $AdComputers)
-        {
-            $Counter++
-            
-            Write-Progress -Activity "|| Locating shares from computer objects in Active Directory" -Status "|| Enumerating shares on $Counter/$adcomputerscount computers" -PercentComplete ($Counter / $AdComputersCount * 100)
-            if ($DebugVerbose.IsPresent) { Write-Host "Debug::Working on computer: $adcomputer" -ForegroundColor Cyan }
-   
-            $ComputerName = $AdComputer.Name
-            $Shares=$(Invoke-ShareFinder $ComputerName -CheckShareAccess -ExcludeStandard)
-
-            foreach ($share in $Shares)
-            {
-                $ShareName = $share.ShareName
-                $ShareCounter++
-                
-
-                if ($ShareName.Contains(' '))
-                {
-                    if ($ShareCounter -eq 1) {  $ReturnValue = "'" + $ShareName + "'" }
-                    else { $ReturnValue = $ReturnValue + ";'" + $ShareName + "'" }
-                }
-                else 
-                {
-                    if ($ShareCounter -eq 1) {  $ReturnValue = $ShareName }
-                    else { $ReturnValue = $ReturnValue + ';' + $ShareName }
-                }
-            } 
-        }
-    }
-    Write-Host "|| Enumerated " -NoNewline
-    Write-Host $ShareCounter  -ForegroundColor Yellow -NoNewline
-    Write-Host " shares."
-    return $ReturnValue
-}
-
-Function DefineSearchTargetStandalone
+Function SearchTargetHostOnly
 {
     $ReturnValue = ''
-
-    $FixedDrives = GET-WMIOBJECT –query “SELECT * from win32_logicaldisk where DriveType = '3'"
+    $FixedDrives = GET-WMIOBJECT -query "SELECT * from win32_logicaldisk where DriveType = '3'"
 
     ForEach ($FixedDrive in $FixedDrives) 
-    {
-     
+    {     
         $FixedDriveName = $FixedDrive.DeviceId
 
         if ($FixedDriveName.Contains(' '))
         {
-            if ($ReturnValue.Length -eq 0) {  $ReturnValue = "'" + $FixedDriveName + "'" }
+            if ($ReturnValue.Length -eq 0) { $ReturnValue = "'" + $FixedDriveName + "'" }
             else { $ReturnValue = $ReturnValue + ";'" + $FixedDriveName + "'" }
         }
         else 
         {
-            if ($ReturnValue.Length -eq 0) {  $ReturnValue = $FixedDriveName }
+            if ($ReturnValue.Length -eq 0) { $ReturnValue = $FixedDriveName }
             else { $ReturnValue = $ReturnValue + ';' + $FixedDriveName }
         }
-
     }
-    Write-Host "|| Enumerated " -NoNewline
+    Write-Host '|| Enumerated ' -NoNewline
     Write-Host $ReturnValue -ForegroundColor Yellow -NoNewline
-    Write-host " as fixed drive(s)."
+    Write-host ' as fixed drive(s).'
+    Write-Log -Level Info -Message "Enumerated $ReturnValue as fixed drive(s)."
     return $ReturnValue
 }
-Function DefineSearchTargetStandaloneScanTarget
+
+Function SearchTargetScanPath
 {
-param ($Target)
+  [CmdletBinding()]
+  param ($Target)
 
     $ReturnValue = ''
 
-    $FixedDrives = @()
-    $FixedDrives = $Target.split(';')
+    $ScanPaths = @()
+    $ScanPaths = $Target.split(';')
 
-    ForEach ($FixedDrive in $FixedDrives) 
+    if ($ExcludedTargets.length -eq 0)
+    {
+        $arrExcludedTargets = $arrExcludedTargetsStatic
+    }
+    else                 
+    {
+        $arrExcludedTargets = $ExcludedTargets.split(';') + $arrExcludedTargetsStatic
+    }
+
+    ForEach ($ScanPath in $ScanPaths) 
     {     
-        if ($FixedDrive.Contains(' '))
+        if ($(Test-Path -Path $ScanPath))
         {
-            if ($ReturnValue.Length -eq 0) {  $ReturnValue = "'" + $FixedDrive + "'" }
-            else { $ReturnValue = $ReturnValue + ";'" + $FixedDrive + "'" }
-        }
-        else 
-        {
-            if ($ReturnValue.Length -eq 0) {  $ReturnValue = $FixedDrive }
-            else { $ReturnValue = $ReturnValue + ';' + $FixedDrive }
-        }
+            $ExcludeShare = $false    
 
+            foreach ($ExcludedTarget in $arrExcludedTargets)
+            {
+                if ($ScanPath -match $ExcludedTarget)
+                {
+                    $ExcludeShare = $true
+                }
+            }
+
+            if ($ExcludeShare -eq $false)
+            {   
+                if ($ScanPath.Contains(' '))
+                {
+                    if ($ReturnValue.Length -eq 0) {  $ReturnValue = "'" + $ScanPath + "'" }
+                    else { $ReturnValue = $ReturnValue + ";'" + $ScanPath + "'" }
+                }
+                else 
+                {
+                    if ($ReturnValue.Length -eq 0) {  $ReturnValue = $ScanPath }
+                    else { $ReturnValue = $ReturnValue + ';' + $ScanPath }
+                }
+            }
+        }
+        else
+        {
+            Write-Log -Message "Skipping path: $ScanPath because it does not exist."
+            Write-Verbose -Message "Skipping path: $ScanPath because it does not exist."
+        }
     }
     return $ReturnValue
 }
 
-
-Function PauseAndClose
+Function CPR-FinderDomainMode
 {
-    Write-Host '|| Exiting...' -ForegroundColor Red;
-    Exit
+    if ($ScanTarget -ne '') 
+    {
+        Write-Host '||' -NoNewline
+        Write-Host " ScanTarget can't be combined with DomainModes" -ForegroundColor Red
+        Write-Host "|| Try Get-Help '$PSCommandPath'"
+        PauseAndClose
+    }
+
+    $IsPartOfDomain = (Get-WmiObject -Class Win32_ComputerSystem).PartOfDomain 
+
+    if ($IsPartOfDomain -eq $true )
+    {
+        $ADModuleExists = ADModuleExistsCheck
+
+        if ($ADModuleExists) 
+        {
+            # Define host target
+            $ComputerStaleDate = (Get-Date).AddDays(-$ComputerPasswordAgeDays)
+
+            if ($ScanMode -eq 'DomainModeServersOnly') 
+            {        
+                $AdComputers = Get-ADComputer -filter {(passwordLastSet -ge $ComputerStaleDate) -and (enabled -eq $true) -and (OperatingSystem -like '*server*') } -properties Name
+                $AdComputers += Get-ADComputer -filter {(passwordLastSet -ge $ComputerStaleDate) -and (enabled -eq $true) -and (OperatingSystem -notlike '*Windows*') } -properties Name
+            }
+            elseif ($ScanMode -eq 'DomainModeAll')
+            {
+                $AdComputers = Get-ADComputer -filter {(passwordLastSet -ge $ComputerStaleDate) -and (enabled -eq $true) } -properties Name
+            }
+    
+            $AdComputersCount = $AdComputers.Count
+            Write-Log -Message "Found $AdComputersCount computer objects in Active Directory, based on selected search criteria."
+            Write-Host "|| Found $AdComputersCount computer objects in Active Directory, based on selected search criteria."
+
+            [int]$Counter = 0
+            [int]$ShareCounterTotal = 0
+
+            if ($AdComputersCount -gt 0) 
+            {
+                if ($ExcludedTargets.length -eq 0)
+                {
+                    $arrExcludedTargets =  $arrExcludedTargetsStatic
+                }
+                else                 
+                {
+                    $arrExcludedTargets = $ExcludedTargets.split(';')  +  $arrExcludedTargetsStatic
+                }
+                
+                $AdComputers = Get-Random -InputObject $AdComputers -Count $AdComputers.count
+                $EnumerateStartTime = Get-date
+                
+                ForEach ($AdComputer in $AdComputers)
+                {
+                    $Counter++
+                    $SearchTarget = ''
+                    [int]$ShareCounter = 0
+                    $ComputerName = $AdComputer.Name
+                    $ComputerScanStarTime = Get-Date 
+                    Write-Log -Message "Enumerating shares on $ComputerName"                   
+                    $Shares=$(Invoke-ShareFinder -HostList $ComputerName -CheckShareAccess -ExcludeStandard)
+                    $ComputerShareCount = $( $shares |Measure-Object).Count
+                    Write-Log -Message "Found $($($shares|Measure-Object).Count) shares on $Computername."
+                    Write-Progress -Activity "|| Start time: $EnumerateStartTime. Locating shares from computer objects in Active Directory. Currently searching $ComputerName" -Status "|| Enumerating shares on $Counter/$adcomputerscount computers" -PercentComplete ($Counter / $AdComputersCount * 100)
+                    Write-log -Message "Working on computer: $adcomputer"
+                    
+                    foreach ($share in $Shares)
+                    {
+                        $ExcludeShare = $false                        
+                        $ShareName = $share.ShareName
+                        $ShareCounter++
+
+                        foreach ($ExcludedTarget in $arrExcludedTargets)
+                        {
+                           if ($ShareName -match $ExcludedTarget)
+                            {
+                                $ExcludeShare = $true
+                                Write-Log -Message "Excluding $Sharename on $Computername because it matches $ExcludedTarget."
+                            }
+                        }
+                        if ($ExcludeShare -eq $false)
+                        {                                         
+                            $ShareCounterTotal++
+
+                            if ($ShareName.Contains(' '))
+                            {
+                                $SearchTarget = "'" + $ShareName + "'" 
+                            }
+                            else 
+                            {
+                                $SearchTarget = $ShareName 
+                            }
+
+                            if ($SearchTarget -ne '') 
+                            {
+                                ShowScanProgressShare -ShareName $ShareName -TotalShares $ComputerShareCount -IterationShare $ShareCounter
+                                Run-Scanner -flpsearchPath $flpsearchPath -flpsearchCriteriaPath $flpsearchCriteriaPath -ShareList $SearchTarget -OutFileName $OutFileFLPSearch -ComputerName $ComputerName -TotalComputers $AdComputersCount -IterationComputer $Counter  
+                                readstats
+                            }
+                        }
+                    } 
+                }
+                Write-Host '|| ' -NoNewline
+                Write-Host 'Scan complete.' -ForegroundColor Green
+                Write-Log -Message 'Scan complate.'
+                Write-Host ' shares.'
+            }
+            else  # NO HOSTS WHERE FOUND -> EXIT
+            {
+                Write-Log -Level Warn -Message 'No hosts found.'
+                PauseAndClose
+            }
+        }
+    } 
+    else 
+    {
+        Write-Host 'Computer not part of domain. Unable to perform domain scan'
+        Write-Log -Level Warn -Message 'Computer not part of domain. Unable to perform domain scan'
+        PauseAndClose
+    }
 }
 
 Function CPR-Finder 
 {
-<#
-    .SYNOPSIS
+    <#
+        .SYNOPSIS
 
-    Identifies shares and checks file content for CPR-numbers (Danish Social Security Numbers (SSN)). 
-	The check is performed based on regular expressions. 
-    Modulus 11 check is performed to minimize the amount of false positives.
-	Dates where modulus 11 is not upheld are excluded.
+        Author:  @defendaton
 
-    License: BSD 3-Clause
+        Identifies shares and checks file content for CPR-numbers (Danish Social Security Numbers (SSN)). 
+      The check is performed based on regular expressions. 
+        Modulus 11 check is performed to minimize the amount of false positives.
+      Dates where modulus 11 is not upheld are excluded.
 
-
+        License: BSD 3-Clause
     #>	
+
+    if ($CPRFinderPath -eq '')
+    { 
+        Write-Host '||' -NoNewline; write-host " Can't locate CPR-Finder pat. Make ensure you run the script as described." -ForegroundColor Red
+        Write-Log -Message "Can't locate CPR-Finder path. Make ensure you run the script as described. " -Level Warn 
+        PauseAndClose
+    }
     
-    if (!$(Test-Path $flpsearchPath)) 
+    if (!$(Test-Path -Path $flpsearchPath)) 
     {
-        Write-Host "|| Can't locate FileLocator Pro on the following path ($flpsearchPath)" -ForegroundColor Red
+        Write-Host '||' -NoNewline; write-host " Can't locate FileLocator Pro on the following path ($flpsearchPath)" -ForegroundColor Red
+        Write-Log -Message "Can't locate FileLocator Pro on the following path ($flpsearchPath)" -Level Warn 
         PauseAndClose
     }
 
-    if (!$(Test-Path $flpsearchCriteriaPath)) 
+    if (!$(Test-Path -Path $flpsearchCriteriaPath)) 
     {
-        Write-Host "|| Can't locate FileLocatorPro saved criteria on the following path ($flpsearchCriteriaPath)" -ForegroundColor Red
+        Write-Host '||' -NoNewline; write-host " Can't locate FileLocatorPro saved criteria on the following path ($flpsearchCriteriaPath)" -ForegroundColor Red
+        Write-Log -Message "Can't locate FileLocatorPro saved criteria on the following path ($flpsearchCriteriaPath)" -Level Warn
         PauseAndClose
     }
-    
-    if (!$(Test-Path $OutfilePath)) 
+
+
+
+    if (($ScanTarget -ne '' -and $ExcludedTargets -ne ''))
     {
-        New-Item -ItemType directory -Path "$OutfilePath" | Out-Null
-    } 
-    
-    if (Check-IsProcessRunning)
-    {
-         Write-Host "|| FileLocatorPro is already running." -ForegroundColor Red
+         Write-Host '||' -NoNewline; write-host ' It is not possible to combine parameter ''ScanTarget''  with parameter ''ExcludedTargets''.' -ForegroundColor Red
+         Write-Host '||' -NoNewline; write-host ' Remove one of the parameters and try again.' -ForegroundColor Red
+         Write-Log -Level Warn -Message 'It is not possible to combine parameter ''ScanTarget''  with parameter ''ExcludedTargets''.'
          PauseAndClose
     }
 
-    
-    if ($ScanMode.Contains("DomainMode")) 
+    if ($(Check-IsProcessRunning) -eq $true )
     {
+         Write-Host '||' -NoNewline; write-host ' FileLocatorPro is already running.' -ForegroundColor Red
+         Write-Log -Level Warn -Message 'FileLocatorPro is already running.'
+         PauseAndClose
+    }
+    
+    if ($ScanMode.Contains('DomainMode') -and $StartGui.IsPresent) 
+    {
+        Write-Host '||' -NoNewline; write-host " Can't combine DomainMode scans with the StartGui switch. Remove the StartGui switch and try again." -ForegroundColor Red
+        Write-Log -Message "Can't combine DomainMode scans with the StartGui switch. Remove the StartGui switch and try again." -Level Warn 
+        PauseAndClose
+    } 
 
-        if ($ScanTarget -ne "") 
-        {
-            Write-Host "||" -NoNewline
-            Write-Host " ScanTarget can't be combined with DomainModes" -ForegroundColor Red
-            Write-Host "|| Try Get-Help '$PSCommandPath'"
-            PauseAndClose
-
-        }
-
-
-        $IsPartOfDomain = (Get-WmiObject -Class Win32_ComputerSystem).PartOfDomain 
-
-        if ($IsPartOfDomain -eq $true )
-        {
-            $ADModuleExists = ADModuleExistsCheck
-
-            if ($ADModuleExists) 
-            {
-                $SearchTarget = DefineSearchTargetDomain
-            }
-
-        } 
-        else 
-        {
-            Write-Host "Computer not part of domain. Unable to perform domain scan"
-            PauseAndClose
-        }
+    if ($ScanMode.Contains('DomainMode')) 
+    {
+        Write-Log -Level Info -Message 'Domain Mode.'
+        CPR-FinderDomainMode
     } 
     else
     {
-        if ($ScanTarget -ne "") 
+        if ($ScanTarget -ne '') 
         {
-            Write-Host "|| Scan target provided: " -NoNewline
-            Write-Host $ScanTarget -NoNewline -ForegroundColor Yellow
-            Write-Host "."
-            $SearchTarget = DefineSearchTargetStandaloneScanTarget $ScanTarget           
+            Write-Host '|| Scan target provided: ' -NoNewline; Write-Host $ScanTarget -ForegroundColor Yellow
+            $SearchTarget = SearchTargetScanPath -Target $ScanTarget
+            Write-Log -Level Info -Message "Scan target provided: $ScanTarget"           
         }
-        else 
+        else
         {
-            $SearchTarget = DefineSearchTargetStandalone
-        
+            $SearchTarget = SearchTargetHostOnly 
+            Write-Log -Level Info -Message 'Stand alone mode.'       
         }
-    }                    
-                   
 
-    if ($StartGui.IsPresent) {Run-Scanner -flpsearchPath $flpsearchPath -flpsearchCriteriaPath $flpsearchCriteriaPath -ShareList $SearchTarget -OutFileFLPSearch $OutFileFLPSearch -StartGui}
-    else  {Run-Scanner -flpsearchPath $flpsearchPath -flpsearchCriteriaPath $flpsearchCriteriaPath -ShareList $SearchTarget -OutFileFLPSearch $OutFileFLPSearch} 
 
-    Start-Sleep -Seconds 5   
-
-    # EXPORT FILES IN CSV AND HTML FORMAT
-    ParseOutputFile 
+        if ($SearchTarget -ne '') 
+        {
+            if ($StartGui.IsPresent) 
+            {
+                Write-Log -Level Info -Message "Starting Run-Scanner -flpsearchPath $flpsearchPath -flpsearchCriteriaPath $flpsearchCriteriaPath -ShareList $SearchTarget -OutFileName $OutFileFLPSearch -StartGui"
+                Run-Scanner -flpsearchPath $flpsearchPath -flpsearchCriteriaPath $flpsearchCriteriaPath -ShareList $SearchTarget -OutFileName $OutFileFLPSearch -StartGui
+            }
+            else  
+            {
+                Write-Log -Level Info -Message "Starting Run-Scanner -flpsearchPath $flpsearchPath -flpsearchCriteriaPath $flpsearchCriteriaPath -ShareList $SearchTarget -OutFileName $OutFileFLPSearch"
+                Run-Scanner -flpsearchPath $flpsearchPath -flpsearchCriteriaPath $flpsearchCriteriaPath -ShareList $SearchTarget -OutFileName $OutFileFLPSearch
+            }
+            readstats  
+        }
+        else
+        {
+            Write-Host '||' -NoNewline; Write-Host ' No shares or fixed drives exists in the provided scan target ' -ForegroundColor Red
+            Write-Log -Level Warn -Message 'No shares or fixed drives exists in the provided scan target.'
+            PauseAndClose
+        }
+    }          
+    ParseOutputFile
+    Start-Sleep -Seconds 2       
 }
 
-# RUN CPR-Finder
 CPR-Finder
