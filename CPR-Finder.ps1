@@ -154,7 +154,7 @@ param
         [string]$ExcludedTargets,
         [string]$OutputFilePrefix = ''
 )
-
+$askjdhasd = ''
 $StartTime = $(get-date)
 [decimal]$script:SearchedGB = 0
 [long]$script:SearchedItems = 0
@@ -1908,7 +1908,8 @@ Function ShowScanProgressScanTarget
         $SearchTargetLength = $ArrShareList.Count
 
         if ($ArrShareList.Contains($LastShareOrDrive) -or $LastShareOrDrive -ne '')
-        {            [int]$ShareIndex = $ArrShareList.IndexOf($LastShareOrDrive) + 1 
+        {
+            [int]$ShareIndex = $ArrShareList.IndexOf($LastShareOrDrive) + 1 
             if ($SearchTargetLength -gt 1) 
             {
                 Write-Progress -Activity '|| Scanning (progressbar can fluctuate as data volume vary)'  -Status "|| Scanning $ShareIndex/$SearchTargetLength drives" -PercentComplete ($ShareIndex / $SearchTargetLength * 100)              
